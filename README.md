@@ -39,6 +39,8 @@ so that `pkg-config --cflags --libs raylib` works. Developed on Linux
 (WSL2).
 
 ```sh
+git clone https://github.com/ShauryaSharma1205/ev-route-planner.git
+cd ev-route-planner
 make          # builds ./ev_planner
 make run      # builds and starts it (run from the repository root)
 ```
