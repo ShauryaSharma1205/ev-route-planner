@@ -1,20 +1,31 @@
-# Build output
+# ---- Build output -------------------------------------------------------
 ev_planner
-test_*
-!tests/test_*.c
-*.o
-
-# Large / regenerable data (rebuild with scripts/process_roads.py)
-data/raw/
-data/processed/*.csv
-data/processed/*.geojson
-data/processed/backup-*/
-*:Zone.Identifier
-
-# Python cache, editor leftovers, backups
-__pycache__/
-*.save
-*.reverted-bak
-.vscode/
 baseline_routes
 baseline_routes_san
+/test_*
+*.o
+.test_output
+.baseline_output
+.sanitize_output
+
+# ---- Raw OpenStreetMap downloads (re-download, see README) ---------------
+data/raw/
+*.osm.pbf
+
+# ---- Processed data -------------------------------------------------------
+# Tracked: data/processed/vertices.csv, roads.csv (loaded by the app) and
+# region_map.png. Not tracked:
+#   road_geometry.csv  - 140 MB, over GitHub's 100 MB file limit, and not
+#                        read by the C code (regenerate with
+#                        scripts/process_roads.py)
+#   *.geojson          - osmium export of the raw extract, unused
+#   backup-*/          - local backups of older data
+data/processed/road_geometry.csv
+data/processed/*.geojson
+data/processed/backup-*/
+
+# ---- OS / editor / tool leftovers ----------------------------------------
+*:Zone.Identifier
+__pycache__/
+*.save
+.vscode/
