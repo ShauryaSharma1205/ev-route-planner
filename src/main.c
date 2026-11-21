@@ -11,7 +11,6 @@
 #include <stdlib.h>
 
 #define CITY_COUNT 9
-#define MAX_STATIONS_PER_ROAD 6
 
 /* Road nodes are placed roughly this far apart along each traced road. */
 #define ROAD_NODE_SPACING_KM 3.0

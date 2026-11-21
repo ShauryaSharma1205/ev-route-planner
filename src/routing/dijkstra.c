@@ -1,7 +1,6 @@
 #include "dijkstra.h"
 
 #include <stdlib.h>
-#include <math.h>
 #include <float.h>
 
 /* ---------- MIN-HEAP ---------- */

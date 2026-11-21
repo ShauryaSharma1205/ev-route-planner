@@ -54,7 +54,6 @@ typedef struct {
     bool calculationRequested;
     bool routeCalculated;
     bool batterySufficient;
-    bool fallbackUsed;
 
     /* Numeric results of the last successful route. */
     double distanceKm;
@@ -76,11 +75,6 @@ typedef struct {
 
     const Vector2 *stationPoints;    /* all stations (not owned by GUI) */
     size_t stationPointCount;
-
-    double originLat;
-    double originLon;
-    double destinationLat;
-    double destinationLon;
 } PlannerGUI;
 
 typedef struct {

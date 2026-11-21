@@ -10,24 +10,14 @@
 typedef struct RouteSummary {
     bool success;
     bool batterySufficient;
-    bool fallbackUsed;
-
-    int sourceVertex;
-    int destinationVertex;
-
-    double originSnapKm;
-    double destinationSnapKm;
 
     double distanceKm;
     double travelTimeHours;
 
     double energyRequiredKWh;
-    double initialEnergyKWh;
     double remainingEnergyKWh;
 
-    size_t pathLength;
     size_t routePointCount;
-
     Vector2 *routePoints;          /* x = longitude, y = latitude */
 
     Vector2 *chargeStops;          /* charging stops used, x = lon, y = lat */
@@ -35,11 +25,6 @@ typedef struct RouteSummary {
 
     double drivingTimeHours;
     double chargingTimeHours;
-
-    double originLat;
-    double originLon;
-    double destinationLat;
-    double destinationLon;
 
     char message[160];
 
@@ -57,7 +42,6 @@ typedef struct RouteSummary {
     double baselineMs;
     double baselineDistanceKm;
     size_t baselineSettled;
-    size_t baselinePushes;
 } RouteSummary;
 
 /* Battery-aware routing: fastest route (driving + charging time) that never

@@ -40,8 +40,9 @@ typedef struct
 } BatteryRoute;
 
 
-/* Find the shortest feasible route considering battery energy
-   and operational charging stations. */
+/* Find the fastest feasible route (driving + charging time) over
+   (vertex, battery level) states, never dropping below the reserve and
+   charging to full only at operational stations. */
 bool BatteryAwareDijkstra(
     const Graph *graph,
     const BatterySpec *spec,

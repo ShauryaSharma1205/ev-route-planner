@@ -1,5 +1,4 @@
 #include "gui.h"
-#include "../routing/route_service.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -407,7 +406,6 @@ void GUISetRoute(PlannerGUI *g, const RouteSummary *r)
 
     g->routeCalculated = r->success;
     g->batterySufficient = r->batterySufficient;
-    g->fallbackUsed = r->fallbackUsed;
 
     /* Stats are kept even for infeasible searches. */
     g->stats = (AlgoStats){
@@ -458,11 +456,6 @@ void GUISetRoute(PlannerGUI *g, const RouteSummary *r)
             g->chargeStopCount = r->chargeStopCount;
         }
     }
-
-    g->originLat = r->originLat;
-    g->originLon = r->originLon;
-    g->destinationLat = r->destinationLat;
-    g->destinationLon = r->destinationLon;
 }
 
 void InitializeGUI(PlannerGUI *g)
@@ -1384,17 +1377,14 @@ static void DrawMap(const PlannerGUI *g, const MapData *map,
 
     DrawMapLegend(box, s);
 
-    /* bottom-right note: data caveat, or a warning about approximations */
-    bool warn = route && g->fallbackUsed;
-    const char *t = warn
-        ? "Some connector sections are approximate"
-        : "Manual road distances · not GPS navigation";
+    /* bottom-right note: the data caveat */
+    const char *t = "Manual road distances · not GPS navigation";
     float w = TextWidth(t, 12.5f * s, false);
     Rectangle r = {box.x + box.width - 14 * s - w - 28 * s,
                    box.y + box.height - 46 * s, w + 28 * s, 32 * s};
     RoundRect(r, 16 * s, C_CHIP);
     Text(t, r.x + 14 * s, r.y + (r.height - 12.5f * s) / 2 - 1 * s,
-         12.5f * s, warn ? C_RED : C_MUTED);
+         12.5f * s, C_MUTED);
 }
 
 /* ============================ RESULTS ============================ */

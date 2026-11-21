@@ -4,7 +4,6 @@
 #include <math.h>
 #include <float.h>
 #include <stdint.h>
-#include <limits.h>
 
 #define ENERGY_SCALE 100.0   /* 0.01 kWh resolution */
 
@@ -175,7 +174,7 @@ static bool HeapPop(MinHeap *heap, HeapEntry *result)
    (vertex ID, remaining battery units)
 
    Example:
-   (5, 120) = vertex 5 with 12.0 kWh.
+   (5, 1200) = vertex 5 with 12.00 kWh (units of 0.01 kWh).
 */
 
 static size_t StateIndex(

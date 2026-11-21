@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include "graph_loader.h"
 
 #include <stdio.h>
@@ -329,13 +327,8 @@ static bool LoadRoads(Graph *graph, const char *filename)
         }
 
         /*
-         * FIX:
-         * Self-loop edges are intentionally ignored.
-         *
-         * They do not contribute to useful routing,
-         * and GraphAddRoadWithSpeed correctly rejects them.
-         *
-         * They must NOT terminate the entire CSV loading.
+         * Self-loop edges are skipped, not treated as errors: they are
+         * useless for routing and GraphAddRoadWithSpeed rejects them.
          */
 
         if (source == destination)

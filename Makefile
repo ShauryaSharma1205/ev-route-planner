@@ -1,14 +1,14 @@
 CC = gcc
 
 CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -O2 \
-         -Iinclude -Isrc \
+         -Isrc \
          $(shell pkg-config --cflags raylib)
 
 LDFLAGS = $(shell pkg-config --libs raylib) -lm
 
 TARGET = ev_planner
 
-SRC = $(shell find src -name '*.c' ! -path 'src/tests/*')
+SRC = $(shell find src -name '*.c')
 HDR = $(shell find src -name '*.h')
 
 # Everything except the app entry point and the GUI, for linking tests.

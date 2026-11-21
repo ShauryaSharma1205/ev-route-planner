@@ -42,7 +42,7 @@ static int FindCity(const Graph *graph, const char *name)
     return -1;
 }
 
-/* Monotonic-enough wall clock in milliseconds (C11 timespec_get). */
+/* Wall-clock time in milliseconds (C11 timespec_get), for timing searches. */
 static double NowMs(void)
 {
     struct timespec ts;
@@ -65,7 +65,6 @@ static void RunBaseline(const Graph *graph, int source, int target,
 
     summary->baselineMs = NowMs() - t0;
     summary->baselineSettled = result.settledCount;
-    summary->baselinePushes = result.pushCount;
     summary->baselineDistanceKm = result.distance[target] < DBL_MAX
         ? result.distance[target] : -1.0;
     summary->baselineValid = true;
@@ -98,7 +97,6 @@ void RouteSummaryFree(RouteSummary *summary)
 
     summary->routePoints = NULL;
     summary->chargeStops = NULL;
-    summary->pathLength = 0;
     summary->routePointCount = 0;
     summary->chargeStopCount = 0;
 }
@@ -137,14 +135,6 @@ bool CalculateRoute(
                  "Origin and destination are identical.");
         return false;
     }
-
-    summary->sourceVertex = source;
-    summary->destinationVertex = target;
-
-    summary->originLat = graph->nodes[source].vertex.latitude;
-    summary->originLon = graph->nodes[source].vertex.longitude;
-    summary->destinationLat = graph->nodes[target].vertex.latitude;
-    summary->destinationLon = graph->nodes[target].vertex.longitude;
 
     BatterySpec spec;
     BatteryState state;
@@ -258,7 +248,6 @@ bool CalculateRoute(
 
     summary->routePoints = points;
     summary->routePointCount = pointCount;
-    summary->pathLength = pointCount;
 
     summary->chargeStops = stops;
     summary->chargeStopCount = stopCount;
@@ -268,14 +257,12 @@ bool CalculateRoute(
     summary->drivingTimeHours = drivingTime;
     summary->chargingTimeHours = chargingTime;
 
-    summary->initialEnergyKWh = state.energyKWh;
     summary->energyRequiredKWh =
         route.totalDistanceKm * consumptionKWhPerKm;
     summary->remainingEnergyKWh = route.finalBatteryKWh;
 
     summary->batterySufficient = true;
     summary->success = true;
-    summary->fallbackUsed = false;
 
     if (stopCount == 0) {
         snprintf(summary->message, sizeof(summary->message),
