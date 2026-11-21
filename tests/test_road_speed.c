@@ -64,5 +64,7 @@ int main(void)
         edge = edge->next;
     }
 
+    GraphFree(&graph);
+
     return 0;
 }

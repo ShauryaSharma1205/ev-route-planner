@@ -16,7 +16,7 @@ LIB_SRC = $(filter-out src/main.c src/gui/%,$(SRC))
 
 TESTS = $(patsubst tests/%.c,%,$(wildcard tests/test_*.c))
 
-.PHONY: all clean run test baseline
+.PHONY: all clean run test baseline sanitize
 
 all: $(TARGET)
 
@@ -50,8 +50,27 @@ baseline: baseline_routes
 	then echo "Baseline routes: identical"; rm -f .baseline_output; \
 	else echo "Baseline routes: DIFFERENT"; rm -f .baseline_output; exit 1; fi
 
+# Startup (CSV load, anchoring, road tracing), the baseline routes and full
+# teardown under AddressSanitizer + UndefinedBehaviorSanitizer + leak check.
+# The GUI is not included: Mesa's GL driver itself leaks a few hundred bytes
+# at exit, which LeakSanitizer would report even for an empty raylib window.
+SAN_FLAGS = -g -O1 -fno-omit-frame-pointer \
+            -fsanitize=address,undefined -fno-sanitize-recover=undefined
+
+baseline_routes_san: tools/baseline_routes.c $(SRC) $(HDR)
+	$(CC) $(CFLAGS) $(SAN_FLAGS) -Dmain=app_main $< \
+	      $(filter-out src/main.c,$(SRC)) -o $@ $(LDFLAGS)
+
+sanitize: baseline_routes_san
+	@ASAN_OPTIONS=detect_leaks=1 ./baseline_routes_san | grep '^@@' \
+	    > .sanitize_output
+	@if grep -v '^#' docs/baseline_routes.txt | diff - .sanitize_output; \
+	then echo "Sanitizers: clean, routes identical"; rm -f .sanitize_output; \
+	else echo "Sanitizers: routes DIFFERENT"; rm -f .sanitize_output; exit 1; fi
+
 clean:
-	rm -f $(TARGET) *.o $(TESTS) .test_output baseline_routes .baseline_output
+	rm -f $(TARGET) *.o $(TESTS) .test_output baseline_routes .baseline_output \
+	      baseline_routes_san .sanitize_output
 
 run: $(TARGET)
 	./$(TARGET)
