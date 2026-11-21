@@ -276,15 +276,15 @@ static Layout GetLayout(void)
     float y0 = l.sidebar.y;
     float fh = 46 * s;
 
-    l.origin      = (Rectangle){sx, y0 + 132 * s, iw, fh};
-    l.destination = (Rectangle){sx, y0 + 216 * s, iw, fh};
-    l.swap        = (Rectangle){sx + iw - 74 * s, y0 + 190 * s,
+    l.origin      = (Rectangle){sx, y0 + 126 * s, iw, fh};
+    l.destination = (Rectangle){sx, y0 + 206 * s, iw, fh};
+    l.swap        = (Rectangle){sx + iw - 74 * s, y0 + 180 * s,
                                 74 * s, 22 * s};
-    l.capacity    = (Rectangle){sx, y0 + 328 * s, iw, fh};
-    l.charge      = (Rectangle){sx, y0 + 412 * s, iw, fh};
-    l.consumption = (Rectangle){sx, y0 + 496 * s, iw, fh};
-    l.button      = (Rectangle){sx, y0 + 568 * s, iw, 52 * s};
-    l.status      = (Rectangle){sx, y0 + 636 * s, iw, 0};
+    l.capacity    = (Rectangle){sx, y0 + 310 * s, iw, fh};
+    l.charge      = (Rectangle){sx, y0 + 390 * s, iw, fh};
+    l.consumption = (Rectangle){sx, y0 + 470 * s, iw, fh};
+    l.button      = (Rectangle){sx, y0 + 540 * s, iw, 52 * s};
+    l.status      = (Rectangle){sx, y0 + 606 * s, iw, 0};
 
     float mx = l.sidebar.x + l.sidebar.width + l.pad;
     float mw = w - mx - l.pad;
@@ -408,6 +408,20 @@ void GUISetRoute(PlannerGUI *g, const RouteSummary *r)
     g->routeCalculated = r->success;
     g->batterySufficient = r->batterySufficient;
     g->fallbackUsed = r->fallbackUsed;
+
+    /* Stats are kept even for infeasible searches. */
+    g->stats = (AlgoStats){
+        .valid = r->statsValid,
+        .searchMs = r->searchMs,
+        .stateSpace = r->stateSpace,
+        .statesSettled = r->statesSettled,
+        .heapPushes = r->heapPushes,
+        .graphVertices = r->graphVertices,
+        .baselineValid = r->baselineValid,
+        .baselineMs = r->baselineMs,
+        .baselineDistanceKm = r->baselineDistanceKm,
+        .baselineSettled = r->baselineSettled
+    };
 
     if (!r->success) {
         SetStatus(g, STATUS_ERROR, r->message);
@@ -857,7 +871,8 @@ static void DrawButton(Rectangle r, float s, const char *label)
              r.y + (r.height - size) / 2 - 1 * s, size, WHITE);
 }
 
-static void DrawStatus(const PlannerGUI *g, Rectangle area, float s)
+/* Returns the height of the drawn status box. */
+static float DrawStatus(const PlannerGUI *g, Rectangle area, float s)
 {
     Color c = g->statusKind == STATUS_SUCCESS ? C_GREEN
             : g->statusKind == STATUS_ERROR   ? C_RED
@@ -878,6 +893,151 @@ static void DrawStatus(const PlannerGUI *g, Rectangle area, float s)
 
     WrappedText(g->statusMessage, box.x + padX, box.y + padY, textW,
                 size, C_TEXT, true);
+
+    return box.height;
+}
+
+/* 1234567 -> "1,234,567" */
+static void FormatCount(size_t n, char *buf, size_t len)
+{
+    char digits[32];
+    snprintf(digits, sizeof(digits), "%zu", n);
+
+    size_t nd = strlen(digits);
+    size_t o = 0;
+
+    for (size_t i = 0; i < nd && o + 2 < len; i++) {
+        if (i > 0 && (nd - i) % 3 == 0)
+            buf[o++] = ',';
+        buf[o++] = digits[i];
+    }
+
+    buf[o] = '\0';
+}
+
+/* 1764294 -> "1.76 M" */
+static void FormatBig(size_t n, char *buf, size_t len)
+{
+    if (n >= 1000000)
+        snprintf(buf, len, "%.2f M", n / 1e6);
+    else if (n >= 10000)
+        snprintf(buf, len, "%.1f k", n / 1e3);
+    else
+        FormatCount(n, buf, len);
+}
+
+static void FormatMs(double ms, char *buf, size_t len)
+{
+    if (ms < 1.0)
+        snprintf(buf, len, "%.3f ms", ms);
+    else if (ms < 100.0)
+        snprintf(buf, len, "%.1f ms", ms);
+    else
+        snprintf(buf, len, "%.0f ms", ms);
+}
+
+/* One "label .......... value" row of the analysis card. */
+static void StatRow(float x, float y, float w, float s, const char *label,
+                    const char *value, bool heading)
+{
+    float size = (heading ? 13.5f : 13) * s;
+
+    if (heading)
+        TextBold(label, x, y, size, C_TEXT);
+    else
+        Text(label, x, y, size, C_MUTED);
+
+    float vw = TextWidth(value, size, heading);
+
+    if (heading)
+        TextBold(value, x + w - vw, y, size, C_TEXT);
+    else
+        Text(value, x + w - vw, y, size, C_TEXT);
+}
+
+/*
+ * Search statistics for the last query: the battery-aware search over
+ * (vertex, battery level) states next to plain Dijkstra over vertices.
+ * Draws the full card when there is room, otherwise only the first part.
+ */
+static void DrawAnalysis(const AlgoStats *st, Rectangle area, float s)
+{
+    float rowH = 21 * s;
+    bool full = area.height >= 184 * s;
+    float h = full ? 184 * s : 114 * s;
+
+    if (area.height < h)
+        return;
+
+    Rectangle card = {area.x, area.y + area.height - h, area.width, h};
+
+    RoundRect(card, 10 * s, C_CARD);
+
+    float x = card.x + 14 * s;
+    float w = card.width - 28 * s;
+    float y = card.y + 14 * s;
+
+    Caption("SEARCH ANALYSIS", x, y, 11.5f * s, C_FAINT);
+
+    const char *hint = st->valid ? "last query" : "run a route";
+    float hw = TextWidth(hint, 12 * s, false);
+    Text(hint, x + w - hw, y - 1 * s, 12 * s, C_FAINT);
+
+    y += 26 * s;
+
+    char a[48], b[48], c[160];
+    const char *dash = "—";
+
+    /* battery-aware search */
+    if (st->valid) FormatMs(st->searchMs, a, sizeof(a));
+    StatRow(x, y, w, s, "Battery-aware Dijkstra",
+            st->valid ? a : dash, true);
+    y += rowH;
+
+    if (st->valid) {
+        FormatCount(st->statesSettled, a, sizeof(a));
+        FormatBig(st->stateSpace, b, sizeof(b));
+        double pct = st->stateSpace
+            ? 100.0 * st->statesSettled / st->stateSpace : 0.0;
+        snprintf(c, sizeof(c), "%s of %s (%.2f%%)", a, b, pct);
+    }
+    StatRow(x, y, w, s, "States settled", st->valid ? c : dash, false);
+    y += rowH;
+
+    if (st->valid) FormatCount(st->heapPushes, a, sizeof(a));
+    StatRow(x, y, w, s, "Heap pushes", st->valid ? a : dash, false);
+    y += rowH;
+
+    if (!full)
+        return;
+
+    y += 4 * s;
+    DrawLineEx((Vector2){x, y}, (Vector2){x + w, y}, 1.0f * s, C_BORDER);
+    y += 10 * s;
+
+    bool bv = st->valid && st->baselineValid;
+
+    /* baseline */
+    if (bv) FormatMs(st->baselineMs, a, sizeof(a));
+    StatRow(x, y, w, s, "Plain Dijkstra (no battery)",
+            bv ? a : dash, true);
+    y += rowH;
+
+    if (bv) {
+        FormatCount(st->baselineSettled, a, sizeof(a));
+        FormatCount(st->graphVertices, b, sizeof(b));
+        snprintf(c, sizeof(c), "%s of %s", a, b);
+    }
+    StatRow(x, y, w, s, "Vertices settled", bv ? c : dash, false);
+    y += rowH;
+
+    if (bv) {
+        if (st->baselineDistanceKm >= 0)
+            snprintf(c, sizeof(c), "%.1f km", st->baselineDistanceKm);
+        else
+            snprintf(c, sizeof(c), "unreachable");
+    }
+    StatRow(x, y, w, s, "Shortest distance", bv ? c : dash, false);
 }
 
 static void DrawSidebar(const PlannerGUI *g, const Layout *l)
@@ -892,7 +1052,7 @@ static void DrawSidebar(const PlannerGUI *g, const Layout *l)
     Text("Battery-aware route with charging stops",
          sx, sb.y + 54 * s, 14 * s, C_MUTED);
 
-    Caption("ROUTE", sx, sb.y + 88 * s, 12 * s, C_FAINT);
+    Caption("ROUTE", sx, sb.y + 84 * s, 12 * s, C_FAINT);
 
     DrawDropdown("From", g->origin, C_GREEN, l->origin, s,
                  g->openDropdown == 0);
@@ -912,21 +1072,14 @@ static void DrawSidebar(const PlannerGUI *g, const Layout *l)
 
     DrawButton(l->button, s, "Calculate route");
 
-    DrawStatus(g, l->status, s);
+    float statusH = DrawStatus(g, l->status, s);
 
-    /* footnote pinned to the bottom of the sidebar */
-    const char *note =
-        "Road distances are manual estimates drawn along OpenStreetMap "
-        "roads. This is a planning aid, not GPS navigation.";
-    float nw = sb.width - 48 * s;
-    float nh = WrappedText(note, 0, 0, nw, 12 * s, C_FAINT, false);
-    float ny = sb.y + sb.height - 20 * s - nh;
+    /* analysis card fills the space between the status and the bottom */
+    float top = l->status.y + statusH + 14 * s;
+    Rectangle area = {sx, top, l->status.width,
+                      sb.y + sb.height - 20 * s - top};
 
-    if (ny > l->status.y + 90 * s) {
-        DrawLineEx((Vector2){sx, ny - 14 * s},
-                   (Vector2){sx + nw, ny - 14 * s}, 1.0f * s, C_BORDER);
-        WrappedText(note, sx, ny, nw, 12 * s, C_FAINT, true);
-    }
+    DrawAnalysis(&g->stats, area, s);
 }
 
 /* ============================ HEADER ============================ */
@@ -1231,15 +1384,17 @@ static void DrawMap(const PlannerGUI *g, const MapData *map,
 
     DrawMapLegend(box, s);
 
-    if (route && g->fallbackUsed) {
-        const char *t = "Some connector sections are approximate";
-        float w = TextWidth(t, 12.5f * s, false);
-        Rectangle r = {box.x + box.width - 14 * s - w - 28 * s,
-                       box.y + box.height - 46 * s, w + 28 * s, 32 * s};
-        RoundRect(r, 16 * s, C_CHIP);
-        Text(t, r.x + 14 * s, r.y + (r.height - 12.5f * s) / 2 - 1 * s,
-             12.5f * s, C_RED);
-    }
+    /* bottom-right note: data caveat, or a warning about approximations */
+    bool warn = route && g->fallbackUsed;
+    const char *t = warn
+        ? "Some connector sections are approximate"
+        : "Manual road distances · not GPS navigation";
+    float w = TextWidth(t, 12.5f * s, false);
+    Rectangle r = {box.x + box.width - 14 * s - w - 28 * s,
+                   box.y + box.height - 46 * s, w + 28 * s, 32 * s};
+    RoundRect(r, 16 * s, C_CHIP);
+    Text(t, r.x + 14 * s, r.y + (r.height - 12.5f * s) / 2 - 1 * s,
+         12.5f * s, warn ? C_RED : C_MUTED);
 }
 
 /* ============================ RESULTS ============================ */

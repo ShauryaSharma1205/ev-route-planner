@@ -19,6 +19,22 @@ typedef enum {
     STATUS_ERROR
 } StatusKind;
 
+/* Search statistics of the last query, shown in the analysis card. */
+typedef struct {
+    bool valid;
+
+    double searchMs;
+    size_t stateSpace;
+    size_t statesSettled;
+    size_t heapPushes;
+    size_t graphVertices;
+
+    bool baselineValid;
+    double baselineMs;
+    double baselineDistanceKm;
+    size_t baselineSettled;
+} AlgoStats;
+
 typedef struct {
     char origin[64];
     char destination[64];
@@ -49,6 +65,8 @@ typedef struct {
     double remainingEnergyKWh;
     double capacityKWh;
     double consumptionKWhPerKm;
+
+    AlgoStats stats;
 
     Vector2 *routePoints;
     size_t routePointCount;

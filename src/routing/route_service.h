@@ -42,6 +42,22 @@ typedef struct RouteSummary {
     double destinationLon;
 
     char message[160];
+
+    /* ---- algorithm statistics (for the analysis panel) ---- */
+    bool statsValid;
+
+    double searchMs;             /* BatteryAwareDijkstra wall time */
+    size_t stateSpace;           /* vertices x battery levels */
+    size_t statesSettled;
+    size_t heapPushes;
+    size_t graphVertices;
+
+    /* Baseline: plain distance-only Dijkstra, ignoring the battery. */
+    bool baselineValid;
+    double baselineMs;
+    double baselineDistanceKm;
+    size_t baselineSettled;
+    size_t baselinePushes;
 } RouteSummary;
 
 /* Battery-aware routing: fastest route (driving + charging time) that never

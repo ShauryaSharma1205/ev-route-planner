@@ -671,6 +671,21 @@ int main(void)
                 );
             }
 
+            if (route.statsValid) {
+                printf(
+                    "Search: battery-aware %.3f ms, %zu of %zu states "
+                    "settled, %zu heap pushes | plain Dijkstra %.3f ms, "
+                    "%zu of %zu vertices settled\n",
+                    route.searchMs,
+                    route.statesSettled,
+                    route.stateSpace,
+                    route.heapPushes,
+                    route.baselineMs,
+                    route.baselineSettled,
+                    route.graphVertices
+                );
+            }
+
             RouteSummaryFree(&route);
         }
 

@@ -14,6 +14,10 @@ typedef struct
     size_t vertexCount;
     int source;
 
+    /* Search statistics. */
+    size_t settledCount;     /* vertices popped and expanded */
+    size_t pushCount;        /* priority-queue insertions */
+
 } PathResult;
 
 

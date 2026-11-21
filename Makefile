@@ -9,19 +9,38 @@ LDFLAGS = $(shell pkg-config --libs raylib) -lm
 TARGET = ev_planner
 
 SRC = $(shell find src -name '*.c' ! -path 'src/tests/*')
+HDR = $(shell find src -name '*.h')
 
-.PHONY: all clean run
+# Everything except the app entry point and the GUI, for linking tests.
+LIB_SRC = $(filter-out src/main.c src/gui/%,$(SRC))
+
+TESTS = $(patsubst tests/%.c,%,$(wildcard tests/test_*.c))
+
+.PHONY: all clean run test
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(SRC) $(HDR)
 	$(CC) $(CFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
+test_%: tests/test_%.c $(LIB_SRC) $(HDR)
+	$(CC) $(CFLAGS) $< $(LIB_SRC) -o $@ $(LDFLAGS)
+
+# Builds and runs every tests/test_*.c; shows a test's output only if it fails.
+test: $(TESTS)
+	@status=0; \
+	for t in $(TESTS); do \
+		if ./$$t > .test_output 2>&1; then \
+			echo "PASS  $$t"; \
+		else \
+			echo "FAIL  $$t"; cat .test_output; status=1; \
+		fi; \
+	done; \
+	rm -f .test_output; \
+	exit $$status
+
 clean:
-	rm -f $(TARGET) *.o \
-	      test_dijkstra test_battery \
-	      test_stations test_battery_routing \
-	      test_road_speed
+	rm -f $(TARGET) *.o $(TESTS) .test_output
 
 run: $(TARGET)
 	./$(TARGET)

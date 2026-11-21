@@ -32,6 +32,11 @@ typedef struct
 
     double finalBatteryKWh;
 
+    /* Search statistics (filled even when no route is found). */
+    size_t stateSpace;       /* vertices x battery levels */
+    size_t statesSettled;    /* states popped and expanded */
+    size_t heapPushes;       /* priority-queue insertions */
+
 } BatteryRoute;
 
 

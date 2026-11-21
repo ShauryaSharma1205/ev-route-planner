@@ -1,9 +1,12 @@
 #include "route_service.h"
 #include "battery_routing.h"
+#include "dijkstra.h"
 
+#include <float.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 /* Fraction of battery capacity that must never be used. */
 #define RESERVE_FRACTION 0.10
@@ -37,6 +40,37 @@ static int FindCity(const Graph *graph, const char *name)
     }
 
     return -1;
+}
+
+/* Monotonic-enough wall clock in milliseconds (C11 timespec_get). */
+static double NowMs(void)
+{
+    struct timespec ts;
+
+    if (timespec_get(&ts, TIME_UTC) != TIME_UTC)
+        return 0.0;
+
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+}
+
+/* Plain distance-only Dijkstra from the same source, for comparison. */
+static void RunBaseline(const Graph *graph, int source, int target,
+                        RouteSummary *summary)
+{
+    PathResult result;
+    double t0 = NowMs();
+
+    if (!Dijkstra(graph, source, &result))
+        return;
+
+    summary->baselineMs = NowMs() - t0;
+    summary->baselineSettled = result.settledCount;
+    summary->baselinePushes = result.pushCount;
+    summary->baselineDistanceKm = result.distance[target] < DBL_MAX
+        ? result.distance[target] : -1.0;
+    summary->baselineValid = true;
+
+    DijkstraFree(&result);
 }
 
 static const GraphEdge *FindFastestEdge(const Graph *graph, int from, int to)
@@ -134,8 +168,20 @@ bool CalculateRoute(
 
     BatteryRoute route = {0};
 
-    if (!BatteryAwareDijkstra(graph, &spec, &state, stations,
-                              source, target, &route)) {
+    double t0 = NowMs();
+    bool found = BatteryAwareDijkstra(graph, &spec, &state, stations,
+                                      source, target, &route);
+    summary->searchMs = NowMs() - t0;
+
+    summary->stateSpace = route.stateSpace;
+    summary->statesSettled = route.statesSettled;
+    summary->heapPushes = route.heapPushes;
+    summary->graphVertices = graph->vertexCount;
+    summary->statsValid = true;
+
+    RunBaseline(graph, source, target, summary);
+
+    if (!found) {
         snprintf(summary->message, sizeof(summary->message),
                  "No feasible route: battery cannot reach the next "
                  "charging station.");

@@ -203,6 +203,10 @@ void BatteryRouteFree(BatteryRoute *route)
     route->totalDistanceKm = 0.0;
     route->totalTimeHours = 0.0;
     route->finalBatteryKWh = 0.0;
+
+    route->stateSpace = 0;
+    route->statesSettled = 0;
+    route->heapPushes = 0;
 }
 
 
@@ -269,7 +273,7 @@ bool BatteryAwareDijkstra(
         return false;
 
 
-    /* Convert battery capacity into 0.1 kWh units. */
+    /* Convert battery capacity into 0.01 kWh units. */
 
     size_t maxEnergy = (size_t)floor(
         spec->capacityKWh * ENERGY_SCALE + 1e-9
@@ -300,6 +304,8 @@ bool BatteryAwareDijkstra(
         stateCount > SIZE_MAX / sizeof(int) ||
         stateCount > SIZE_MAX / sizeof(Action))
         return false;
+
+    route->stateSpace = stateCount;
 
 
     /* ---------- ALLOCATE STATE ARRAYS ---------- */
@@ -392,6 +398,8 @@ bool BatteryAwareDijkstra(
         return false;
     }
 
+    route->heapPushes = 1;
+
 
     /* ---------- DIJKSTRA SEARCH ---------- */
 
@@ -405,6 +413,8 @@ bool BatteryAwareDijkstra(
 
         if (current.cost > cost[currentState])
             continue;
+
+        route->statesSettled++;
 
         size_t u = currentState / energyLevels;
         size_t energy = currentState % energyLevels;
@@ -488,6 +498,8 @@ bool BatteryAwareDijkstra(
                         finalState = SIZE_MAX;
                         goto cleanup;
                     }
+
+                    route->heapPushes++;
                 }
             }
 
@@ -551,6 +563,8 @@ bool BatteryAwareDijkstra(
                         finalState = SIZE_MAX;
                         goto cleanup;
                     }
+
+                    route->heapPushes++;
                 }
             }
         }

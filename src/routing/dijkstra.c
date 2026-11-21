@@ -166,6 +166,8 @@ bool Dijkstra(
     result->previous = NULL;
     result->vertexCount = 0;
     result->source = -1;
+    result->settledCount = 0;
+    result->pushCount = 0;
 
     if (graph->nodes == NULL ||
         graph->vertexCount == 0 ||
@@ -213,6 +215,8 @@ bool Dijkstra(
         return false;
     }
 
+    result->pushCount = 1;
+
     HeapEntry current;
 
     while (HeapPop(&heap, &current))
@@ -223,6 +227,8 @@ bool Dijkstra(
 
         if (current.distance > result->distance[u])
             continue;
+
+        result->settledCount++;
 
         GraphEdge *edge = graph->nodes[u].edges;
 
@@ -250,6 +256,8 @@ bool Dijkstra(
                     DijkstraFree(result);
                     return false;
                 }
+
+                result->pushCount++;
             }
 
             edge = edge->next;
