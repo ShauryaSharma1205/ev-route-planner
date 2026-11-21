@@ -1,0 +1,8 @@
+# Baseline routes (make baseline)
+# Battery: 60 kWh, 0.35 kWh/km, 10% reserve; charge as shown per route.
+# Recorded 2026-11-21 before the clean-up; every later step must reproduce this exactly.
+@@ graph nodes=294 edges=604 stations=36 traced=17 fallback=0
+@@ Dehradun -> Mussoorie @ 50%: ok=1 distance=34.0000 km time=0.971429 h driving=0.971429 h charging=0.000000 h energy=11.9000 kWh left=18.0700 kWh stops=0 points=9 settled=28119 pushes=37237 baseline_km=34.0000 msg="Fastest route. No charging stop needed."
+@@ Dehradun -> Chakrata @ 50%: ok=1 distance=90.0000 km time=2.642917 h driving=2.250000 h charging=0.392917 h energy=31.5000 kWh left=45.5300 kWh stops=1 points=24 settled=320878 pushes=395022 baseline_km=90.0000 msg="1 charging stop (EV-03). Charging adds 24 min."
+@@ Saharanpur -> New Tehri @ 50%: ok=1 distance=162.0000 km time=4.247062 h driving=3.953312 h charging=0.293750 h energy=56.7000 kWh left=8.3000 kWh stops=1 points=53 settled=845835 pushes=936468 baseline_km=162.0000 msg="1 charging stop (EV-30). Charging adds 18 min."
+@@ Dehradun -> Chakrata @ 12%: ok=0 settled=11 pushes=11 baseline_km=90.0000 msg="No feasible route: battery cannot reach the next charging station."
