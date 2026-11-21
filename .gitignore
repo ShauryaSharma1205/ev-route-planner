@@ -1,0 +1,18 @@
+# Build output
+ev_planner
+test_*
+!tests/test_*.c
+*.o
+
+# Large / regenerable data (rebuild with scripts/process_roads.py)
+data/raw/
+data/processed/*.csv
+data/processed/*.geojson
+data/processed/backup-*/
+*:Zone.Identifier
+
+# Python cache, editor leftovers, backups
+__pycache__/
+*.save
+*.reverted-bak
+.vscode/
