@@ -49,7 +49,8 @@ typedef struct {
     int originIndex;
     int destinationIndex;
     int openDropdown;
-    int activeField;
+    int activeField;     /* focused slider: 0 capacity, 1 charge, 2 consumption */
+    int dragSlider;      /* slider being dragged, -1 if none */
 
     bool calculationRequested;
     bool routeCalculated;

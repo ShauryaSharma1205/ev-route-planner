@@ -51,13 +51,20 @@ and builds the city graph before the window opens. On the development
 machine that takes about a second.
 
 **Controls:** choose *From* / *To* from the drop-downs (*Swap* flips them),
-type the battery values, then click **Calculate route** or press
-**Enter**. **Tab** moves between the number fields. **F11** toggles
-fullscreen.
+set the battery with the three sliders, then click **Calculate route** or
+press **Enter**. To set a slider, drag it, click on its track, or scroll
+the mouse wheel over it. The **arrow keys** move the focused slider
+(**Tab** moves focus to the next one). Hold **Shift** for steps 10 times
+larger. **F11** toggles fullscreen.
 
-Input limits: capacity above 0 and up to 300 kWh, charge 0–100%, and
-consumption above 0 and up to 5 kWh/km. The defaults are 60 kWh, 50% and
-0.35 kWh/km. A charge below the 10% reserve is rejected.
+| Slider             | Range            | Step | Default |
+|--------------------|------------------|------|---------|
+| Battery capacity   | 10–150 kWh       | 1    | 60      |
+| Current charge     | 0–100%           | 1    | 50      |
+| Energy consumption | 0.05–1.00 kWh/km | 0.01 | 0.35    |
+
+The charge slider shades the 10% reserve. A charge below it is shown in
+red and rejected, because the trip could not start.
 
 ### Other make targets
 

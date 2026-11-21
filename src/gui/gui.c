@@ -466,6 +466,7 @@ void InitializeGUI(PlannerGUI *g)
     g->destinationIndex = 1;
     g->openDropdown = -1;
     g->activeField = -1;
+    g->dragSlider = -1;
 
     strcpy(g->origin, locations[g->originIndex]);
     strcpy(g->destination, locations[g->destinationIndex]);
@@ -510,28 +511,91 @@ static bool ParseNumber(const char *s, double *v)
     return true;
 }
 
-static void ProcessNumericInput(char *text, size_t maxLength)
+/* ---- sliders ----
+ * Each slider edits one of the value strings in PlannerGUI, which main.c
+ * reads with atof(), so the rest of the program is unaware of the widget. */
+
+typedef struct {
+    const char *label;
+    const char *unit;
+    const char *format;    /* how the value is stored and shown */
+    double min;
+    double max;
+    double step;
+} SliderSpec;
+
+#define SLIDER_COUNT 3
+
+static const SliderSpec sliderSpecs[SLIDER_COUNT] = {
+    {"Battery capacity",   "kWh",    "%.0f", 10.0, 150.0, 1.0},
+    {"Current charge",     "%",      "%.0f",  0.0, 100.0, 1.0},
+    {"Energy consumption", "kWh/km", "%.2f", 0.05,  1.00, 0.01},
+};
+
+static char *SliderText(PlannerGUI *g, int i)
 {
-    if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
-        size_t n = strlen(text);
-        if (n)
-            text[n - 1] = '\0';
-    }
+    return i == 0 ? g->batteryCapacity
+         : i == 1 ? g->batteryCharge
+         : g->energyConsumption;
+}
 
-    int c = GetCharPressed();
+static const char *SliderTextConst(const PlannerGUI *g, int i)
+{
+    return i == 0 ? g->batteryCapacity
+         : i == 1 ? g->batteryCharge
+         : g->energyConsumption;
+}
 
-    while (c > 0) {
-        size_t n = strlen(text);
-        bool isDigit = c >= '0' && c <= '9';
-        bool isDot = c == '.' && !strchr(text, '.');
+static double SliderValue(const PlannerGUI *g, int i)
+{
+    return atof(SliderTextConst(g, i));
+}
 
-        if ((isDigit || isDot) && n < maxLength - 1) {
-            text[n] = (char)c;
-            text[n + 1] = '\0';
-        }
+/* Clamp, snap to the step and store. Returns true if the value changed. */
+static bool SetSliderValue(PlannerGUI *g, int i, double v)
+{
+    const SliderSpec *sp = &sliderSpecs[i];
 
-        c = GetCharPressed();
-    }
+    if (v < sp->min) v = sp->min;
+    if (v > sp->max) v = sp->max;
+
+    v = sp->min + round((v - sp->min) / sp->step) * sp->step;
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), sp->format, v);
+
+    char *text = SliderText(g, i);
+
+    if (strcmp(buf, text) == 0)
+        return false;
+
+    snprintf(text, 16, "%s", buf);
+    return true;
+}
+
+static Rectangle SliderRect(const Layout *l, int i)
+{
+    return i == 0 ? l->capacity : i == 1 ? l->charge : l->consumption;
+}
+
+/* Horizontal extent of the track inside a slider's rectangle. */
+static void SliderTrack(Rectangle r, float s, float *x0, float *x1)
+{
+    *x0 = r.x + 10 * s;
+    *x1 = r.x + r.width - 10 * s;
+}
+
+static double SliderValueAt(Rectangle r, float s, int i, float mouseX)
+{
+    float x0, x1;
+    SliderTrack(r, s, &x0, &x1);
+
+    double t = (mouseX - x0) / (x1 - x0);
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+
+    const SliderSpec *sp = &sliderSpecs[i];
+    return sp->min + t * (sp->max - sp->min);
 }
 
 static void RouteChanged(PlannerGUI *g)
@@ -578,6 +642,72 @@ static void TryCalculate(PlannerGUI *g)
     SetStatus(g, STATUS_INFO, "Calculating route…");
 }
 
+/* A slider moved: keep the old result visible, but say it is stale. */
+static void SliderChanged(PlannerGUI *g)
+{
+    if (g->routeCalculated)
+        SetStatus(g, STATUS_INFO,
+                  "Battery settings changed. Press Calculate route to "
+                  "update the result.");
+}
+
+static void UpdateSliders(PlannerGUI *g, const Layout *l, Vector2 m)
+{
+    /* dragging */
+    if (g->dragSlider >= 0) {
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            int i = g->dragSlider;
+            if (SetSliderValue(g, i, SliderValueAt(SliderRect(l, i), l->s,
+                                                   i, m.x)))
+                SliderChanged(g);
+        } else {
+            g->dragSlider = -1;
+        }
+    }
+
+    if (g->openDropdown >= 0)
+        return;
+
+    bool fine = !(IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+
+    /* mouse wheel over a slider */
+    float wheel = GetMouseWheelMove();
+
+    if (wheel != 0.0f) {
+        for (int i = 0; i < SLIDER_COUNT; i++) {
+            if (!CheckCollisionPointRec(m, SliderRect(l, i)))
+                continue;
+
+            double step = sliderSpecs[i].step * (fine ? 1 : 10);
+            double v = SliderValue(g, i) + (wheel > 0 ? step : -step);
+
+            g->activeField = i;
+            if (SetSliderValue(g, i, v))
+                SliderChanged(g);
+        }
+    }
+
+    /* arrow keys on the focused slider */
+    int i = g->activeField;
+
+    if (i >= 0 && i < SLIDER_COUNT) {
+        int dir = 0;
+
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT) ||
+            IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+            dir = 1;
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT) ||
+            IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+            dir = -1;
+
+        if (dir != 0) {
+            double step = sliderSpecs[i].step * (fine ? 1 : 10);
+            if (SetSliderValue(g, i, SliderValue(g, i) + dir * step))
+                SliderChanged(g);
+        }
+    }
+}
+
 void UpdateGUI(PlannerGUI *g)
 {
     Layout l = GetLayout();
@@ -589,15 +719,16 @@ void UpdateGUI(PlannerGUI *g)
     if (g->openDropdown >= 0 &&
         CheckCollisionPointRec(m, DropdownMenuRect(&l, g->openDropdown)))
         cursor = MOUSE_CURSOR_POINTING_HAND;
+    else if (g->dragSlider >= 0 ||
+             CheckCollisionPointRec(m, l.capacity) ||
+             CheckCollisionPointRec(m, l.charge) ||
+             CheckCollisionPointRec(m, l.consumption))
+        cursor = MOUSE_CURSOR_RESIZE_EW;
     else if (CheckCollisionPointRec(m, l.origin) ||
              CheckCollisionPointRec(m, l.destination) ||
              CheckCollisionPointRec(m, l.swap) ||
              CheckCollisionPointRec(m, l.button))
         cursor = MOUSE_CURSOR_POINTING_HAND;
-    else if (CheckCollisionPointRec(m, l.capacity) ||
-             CheckCollisionPointRec(m, l.charge) ||
-             CheckCollisionPointRec(m, l.consumption))
-        cursor = MOUSE_CURSOR_IBEAM;
 
     SetMouseCursor(cursor);
 
@@ -640,12 +771,14 @@ void UpdateGUI(PlannerGUI *g)
         } else if (CheckCollisionPointRec(m, l.destination)) {
             g->openDropdown = 1;
             g->activeField = -1;
-        } else if (CheckCollisionPointRec(m, l.capacity)) {
-            g->activeField = 0;
-        } else if (CheckCollisionPointRec(m, l.charge)) {
-            g->activeField = 1;
-        } else if (CheckCollisionPointRec(m, l.consumption)) {
-            g->activeField = 2;
+        } else if (CheckCollisionPointRec(m, l.capacity) ||
+                   CheckCollisionPointRec(m, l.charge) ||
+                   CheckCollisionPointRec(m, l.consumption)) {
+            /* grab the slider; UpdateSliders moves it while held */
+            int i = CheckCollisionPointRec(m, l.capacity) ? 0
+                  : CheckCollisionPointRec(m, l.charge)   ? 1 : 2;
+            g->activeField = i;
+            g->dragSlider = i;
         } else if (CheckCollisionPointRec(m, l.button)) {
             TryCalculate(g);
         } else {
@@ -664,17 +797,7 @@ void UpdateGUI(PlannerGUI *g)
         TryCalculate(g);
     }
 
-    if (g->activeField == 0)
-        ProcessNumericInput(g->batteryCapacity,
-                            sizeof(g->batteryCapacity));
-
-    if (g->activeField == 1)
-        ProcessNumericInput(g->batteryCharge,
-                            sizeof(g->batteryCharge));
-
-    if (g->activeField == 2)
-        ProcessNumericInput(g->energyConsumption,
-                            sizeof(g->energyConsumption));
+    UpdateSliders(g, &l, m);
 }
 
 /* ============================ WIDGETS ============================ */
@@ -698,32 +821,6 @@ static void FieldLabel(const char *label, Rectangle r, float s)
     Text(label, r.x + 2 * s, r.y - 22 * s, 14 * s, C_MUTED);
 }
 
-static void DrawInput(const char *label, const char *value,
-                      const char *unit, Rectangle r, float s,
-                      bool active)
-{
-    bool hover = CheckCollisionPointRec(GetMousePosition(), r);
-    float size = 17 * s;
-    float ty = r.y + (r.height - size) / 2 - 1 * s;
-
-    FieldLabel(label, r, s);
-    FieldFrame(r, s, active, hover);
-
-    const char *shown = value[0] ? value : "0";
-    Text(shown, r.x + 14 * s, ty, size, value[0] ? C_TEXT : C_FAINT);
-
-    if (active && fmod(GetTime(), 1.0) < 0.55) {
-        float cx = r.x + 14 * s +
-                   (value[0] ? TextWidth(value, size, false) : 0) + 2 * s;
-        DrawRectangleRec((Rectangle){cx, r.y + 12 * s, 1.5f * s,
-                                     r.height - 24 * s}, C_ACCENT);
-    }
-
-    float uw = TextWidth(unit, 14 * s, false);
-    Text(unit, r.x + r.width - 14 * s - uw,
-         r.y + (r.height - 14 * s) / 2, 14 * s, C_MUTED);
-}
-
 static Color LevelColor(double pct)
 {
     if (pct < 20) return C_RED;
@@ -731,23 +828,100 @@ static Color LevelColor(double pct)
     return C_GREEN;
 }
 
-/* Thin progress bar along the bottom edge of the charge field. */
-static void ChargeBar(Rectangle r, float s, const char *value)
+/*
+ * Slider i inside rectangle r:
+ *   label ................ value unit     (row above r)
+ *   ====================O-------------    (track, filled up to the knob)
+ *   min                             max
+ * The charge slider colours its fill by level and marks the 10% reserve.
+ */
+static void DrawSlider(const PlannerGUI *g, int i, Rectangle r, float s)
 {
-    double pct = atof(value);
-    if (pct < 0) pct = 0;
-    if (pct > 100) pct = 100;
+    const SliderSpec *sp = &sliderSpecs[i];
+    double v = SliderValue(g, i);
+    double t = (v - sp->min) / (sp->max - sp->min);
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
 
-    Rectangle track = {r.x + 12 * s, r.y + r.height - 8 * s,
-                       r.width - 24 * s, 3 * s};
+    bool focused = g->activeField == i;
+    bool dragging = g->dragSlider == i;
+    bool hover = g->openDropdown < 0 &&
+                 CheckCollisionPointRec(GetMousePosition(), r);
 
-    RoundRect(track, 1.5f * s, C_BORDER);
+    bool isCharge = i == 1;
+    bool belowReserve = isCharge && v < 10.0;
+    Color fillColor = isCharge ? LevelColor(v) : C_ACCENT;
 
-    Rectangle fill = track;
-    fill.width = (float)(track.width * pct / 100.0);
+    /* label row: name on the left, value + unit on the right */
+    FieldLabel(sp->label, r, s);
 
-    if (fill.width > 0)
-        RoundRect(fill, 1.5f * s, LevelColor(pct));
+    char value[32];
+    snprintf(value, sizeof(value), "%s %s", SliderTextConst(g, i), sp->unit);
+    float vs = 15 * s;
+    float vw = TextWidth(value, vs, true);
+    TextBold(value, r.x + r.width - 2 * s - vw, r.y - 23 * s, vs,
+             belowReserve ? C_RED : C_TEXT);
+
+    /* track */
+    float x0, x1;
+    SliderTrack(r, s, &x0, &x1);
+    float cy = r.y + 15 * s;
+    float th = 6 * s;
+    float kx = x0 + (float)t * (x1 - x0);
+
+    RoundRect((Rectangle){x0, cy - th / 2, x1 - x0, th}, th / 2, C_CARD);
+
+    if (isCharge) {
+        /* reserve zone: the part of the range the router may not use */
+        float rx = x0 + 0.10f * (x1 - x0);
+        RoundRect((Rectangle){x0, cy - th / 2, rx - x0, th}, th / 2,
+                  WithAlpha(C_RED, 0.25f));
+        DrawLineEx((Vector2){rx, cy - th}, (Vector2){rx, cy + th},
+                   1.5f * s, C_MUTED);
+    }
+
+    if (kx > x0)
+        RoundRect((Rectangle){x0, cy - th / 2, kx - x0, th}, th / 2,
+                  fillColor);
+
+    /* knob */
+    float kr = 9 * s;
+
+    if (focused || dragging || hover)
+        DrawCircleV((Vector2){kx, cy}, kr + 5 * s,
+                    WithAlpha(fillColor, dragging ? 0.35f : 0.22f));
+
+    DrawCircleV((Vector2){kx, cy + 1.5f * s}, kr, (Color){0, 0, 0, 70});
+    DrawCircleV((Vector2){kx, cy}, kr, WHITE);
+    DrawCircleV((Vector2){kx, cy}, kr - 3.5f * s, fillColor);
+
+    /* min / max under the track, or a warning below the reserve */
+    float ls = 11.5f * s;
+    float ly = r.y + 29 * s;
+
+    if (belowReserve) {
+        Text("Below the 10% reserve, the trip cannot start",
+             x0, ly, ls, C_RED);
+        return;
+    }
+
+    char lo[24], hi[24];
+    snprintf(lo, sizeof(lo), sp->format, sp->min);
+    snprintf(hi, sizeof(hi), sp->format, sp->max);
+    Text(lo, x0, ly, ls, C_FAINT);
+
+    if (isCharge) {
+        const char *res = "10% reserve";
+        float rx = x0 + 0.10f * (x1 - x0);
+        float lw = TextWidth(lo, ls, false);
+        float rw = TextWidth(res, ls, false);
+        float tx = rx - rw / 2;
+        if (tx < x0 + lw + 8 * s)
+            tx = x0 + lw + 8 * s;
+        Text(res, tx, ly, ls, C_FAINT);
+    }
+
+    Text(hi, x1 - TextWidth(hi, ls, false), ly, ls, C_FAINT);
 }
 
 static void DrawChevron(Vector2 c, float size, bool up, Color col)
@@ -1055,13 +1229,8 @@ static void DrawSidebar(const PlannerGUI *g, const Layout *l)
 
     Caption("VEHICLE", sx, l->capacity.y - 46 * s, 12 * s, C_FAINT);
 
-    DrawInput("Battery capacity", g->batteryCapacity, "kWh",
-              l->capacity, s, g->activeField == 0);
-    DrawInput("Current charge", g->batteryCharge, "%",
-              l->charge, s, g->activeField == 1);
-    ChargeBar(l->charge, s, g->batteryCharge);
-    DrawInput("Energy consumption", g->energyConsumption, "kWh/km",
-              l->consumption, s, g->activeField == 2);
+    for (int i = 0; i < SLIDER_COUNT; i++)
+        DrawSlider(g, i, SliderRect(l, i), s);
 
     DrawButton(l->button, s, "Calculate route");
 
